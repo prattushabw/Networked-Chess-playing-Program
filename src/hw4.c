@@ -1,6 +1,6 @@
 #include "hw4.h"
-#include <string.h> // Include for memset
-#include <ctype.h>  // Include for isdigit
+// #include <string.h> // Include for memset
+// #include <ctype.h>  // Include for isdigit
 
 void initialize_game(ChessGame *game) {
     game->moveCount = 0;
@@ -28,8 +28,32 @@ void initialize_game(ChessGame *game) {
 }
 
 void chessboard_to_fen(char fen[], ChessGame *game) {
-    (void)fen;
-    (void)game;
+    int k=0;
+    for (int i = 0; i < 8; i++) {
+        int emptyCount=0;
+        for (int j = 0; j < 8; j++) {
+            if (game->chessboard[i][j] =='.'){
+                emptyCount++;
+            }else{
+                if(emptyCount!=0){
+                    fen[k++]='0'+emptyCount;
+                    emptyCount=0;
+                }
+                fen[k++]=game->chessboard[i][j];
+            }
+        }
+        if (emptyCount!=0){
+             fen[k++] = '0' + emptyCount;
+        }
+        if (i < 7) {
+            fen[k++] = '/';
+        }
+    }
+    fen[k++] = ' ';
+    fen[k++] = game->currentPlayer == WHITE_PLAYER ? 'w' : 'b';
+  
+    fen[k] = '\0';
+
 }
 
 bool is_valid_pawn_move(char piece, int src_row, int src_col, int dest_row, int dest_col, ChessGame *game) {
@@ -55,8 +79,6 @@ bool is_valid_pawn_move(char piece, int src_row, int src_col, int dest_row, int 
     return false; 
     return false;
 }
-
-
 
 bool is_valid_rook_move(int src_row, int src_col, int dest_row, int dest_col, ChessGame *game) {
     if (src_row != dest_row && src_col != dest_col) {
@@ -114,8 +136,6 @@ bool is_valid_knight_move(int src_row, int src_col, int dest_row, int dest_col) 
     return true;
 }
 
-
-
 bool is_valid_bishop_move(int src_row, int src_col, int dest_row, int dest_col, ChessGame *game) {
     if (abs(dest_row - src_row) != abs(dest_col - src_col)) {
         return false; 
@@ -146,7 +166,6 @@ bool is_valid_bishop_move(int src_row, int src_col, int dest_row, int dest_col, 
     return true; 
 }
 
-
 bool is_valid_queen_move(int src_row, int src_col, int dest_row, int dest_col, ChessGame *game) {
     if (src_row == dest_row || src_col == dest_col) {
         return is_valid_rook_move(src_row, src_col, dest_row, dest_col, game);
@@ -157,7 +176,6 @@ bool is_valid_queen_move(int src_row, int src_col, int dest_row, int dest_col, C
   
     return false;
 }
-
 
 bool is_valid_king_move(int src_row, int src_col, int dest_row, int dest_col) {
     int row_diff = abs(dest_row - src_row);
@@ -187,7 +205,6 @@ bool is_valid_move(char piece, int src_row, int src_col, int dest_row, int dest_
     }
 }
 
-
 void fen_to_chessboard(const char *fen, ChessGame *game) {
     int row=0;
     int col=0;
@@ -215,49 +232,101 @@ void fen_to_chessboard(const char *fen, ChessGame *game) {
 }
 
 int parse_move(const char *move, ChessMove *parsed_move) {
-    (void)move;
-    (void)parsed_move;
-    return -999;
+    int len = strlen(move);
+    if (len != 4 && len != 5) {
+        return PARSE_MOVE_INVALID_FORMAT;
+    }
+    
+    if (move[0] < 'a' || move[0] > 'h' || move[2] < 'a' || move[2] > 'h') {
+        return PARSE_MOVE_INVALID_FORMAT;
+    }
+
+    if (move[0] < 'a' || move[0] > 'h' || move[2] < 'a' || move[2] > 'h' ||
+        move[1] < '1' || move[1] > '8' || move[3] < '1' || move[3] > '8') {
+        return PARSE_MOVE_OUT_OF_BOUNDS;
+    }
+
+    strncpy(parsed_move->startSquare, move, 2);
+    parsed_move->startSquare[2] = '\0';  
+    strncpy(parsed_move->endSquare, move + 2, len == 5 ? 3 : 2);
+    if (len == 5) {
+        parsed_move->endSquare[3] = '\0';  
+    } else {
+        parsed_move->endSquare[2] = '\0';  
+    }
+
+    if (len == 5) {
+        if ((move[1] == '7' && move[3] == '8') || (move[1] == '2' && move[3] == '1')) {
+            if (move[4] != 'q' && move[4] != 'r' && move[4] != 'b' && move[4] != 'n') {
+                return PARSE_MOVE_INVALID_PROMOTION;
+            }
+        } else {
+            return PARSE_MOVE_INVALID_DESTINATION;
+        }
+    }
+    return 0;  
 }
 
 int make_move(ChessGame *game, ChessMove *move, bool is_client, bool validate_move) {
-    (void)game;
-    (void)move;
-    (void)is_client;
-    (void)validate_move;
-    return -999;
+    int startRow = 8 - (move->startSquare[1] - '1') - 1;
+    int startCol = move->startSquare[0] - 'a';
+    int endRow = 8 - (move->endSquare[1] - '1') - 1;
+    int endCol = move->endSquare[0] - 'a';
+    char piece = game->chessboard[startRow][startCol];
+    char targetPiece;
+
+    if (validate_move) {
+        if ((is_client && game->currentPlayer != WHITE_PLAYER) || (!is_client && game->currentPlayer != BLACK_PLAYER)) {
+            return MOVE_OUT_OF_TURN;
+        }
+
+        if (piece == '.') {
+            return MOVE_NOTHING;
+        }
+
+        bool isPieceWhite = isupper(piece);
+        if ((isPieceWhite && !is_client) || (!isPieceWhite && is_client)) {
+            return MOVE_WRONG_COLOR;
+        }
+
+        targetPiece = game->chessboard[endRow][endCol];
+        if ((isupper(targetPiece) && isPieceWhite) || (islower(targetPiece) && !isPieceWhite)) {
+            return MOVE_SUS;
+        }
+
+        bool isPromotion = strlen(move->endSquare) == 3;
+        if (isPromotion) {
+            if (tolower(piece) != 'p' || ((isPieceWhite && endRow != 0) || (!isPieceWhite && endRow != 7))) {
+                return MOVE_NOT_A_PAWN;
+            }
+        } else {
+            if ((tolower(piece) == 'p') && ((isPieceWhite && endRow == 0) || (!isPieceWhite && endRow == 7))) {
+                return MOVE_MISSING_PROMOTION;
+            }
+        }
+
+        if (!is_valid_move(piece, startRow, startCol, endRow, endCol, game)) {
+            return MOVE_WRONG;
+        }
+    }
+
+    game->chessboard[endRow][endCol] = game->chessboard[startRow][startCol];
+    game->chessboard[startRow][startCol] = '.';
+
+    if (strlen(move->endSquare) == 3) {
+        char promotedPiece = move->endSquare[2];
+        game->chessboard[endRow][endCol] = is_client ? toupper(promotedPiece) : tolower(promotedPiece);
+    }
+
+    game->moves[game->moveCount++] = *move; 
+    if (targetPiece != '.') {
+        game->capturedPieces[game->capturedCount++] = targetPiece;
+    }
+    game->currentPlayer = (game->currentPlayer == WHITE_PLAYER) ? BLACK_PLAYER : WHITE_PLAYER;
+
+    return 0; 
 }
 
-int send_command(ChessGame *game, const char *message, int socketfd, bool is_client) {
-    (void)game;
-    (void)message;
-    (void)socketfd;
-    (void)is_client;
-    return -999;
-}
-
-int receive_command(ChessGame *game, const char *message, int socketfd, bool is_client) {
-    (void)game;
-    (void)message;
-    (void)socketfd;
-    (void)is_client;
-    return -999;
-}
-
-int save_game(ChessGame *game, const char *username, const char *db_filename) {
-    (void)game;
-    (void)username;
-    (void)db_filename;
-    return -999;
-}
-
-int load_game(ChessGame *game, const char *username, const char *db_filename, int save_number) {
-    (void)game;
-    (void)username;
-    (void)db_filename;
-    (void)save_number;
-    return -999;
-}
 
 void display_chessboard(ChessGame *game) {
     printf("\nChessboard:\n");
