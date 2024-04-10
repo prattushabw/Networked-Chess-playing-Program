@@ -327,6 +327,140 @@ int make_move(ChessGame *game, ChessMove *move, bool is_client, bool validate_mo
     return 0; 
 }
 
+int send_command(ChessGame *game, const char *message, int socketfd, bool is_client) {
+    if (!game || !message) return COMMAND_ERROR;
+
+    if (strncmp(message, "/move ", 6) == 0) {
+        ChessMove move;
+        if (parse_move(message + 6, &move) == 0) {
+            if (make_move(game, &move, is_client, true) == 0) {
+                send(socketfd, message, strlen(message), 0); 
+                return COMMAND_MOVE;
+            }
+        }
+        return COMMAND_ERROR;
+    } else if (strcmp(message, "/forfeit") == 0) {
+        send(socketfd, message, strlen(message), 0); 
+        return COMMAND_FORFEIT;
+    } else if (strcmp(message, "/chessboard") == 0 && !is_client) {
+        display_chessboard(game); 
+        return COMMAND_DISPLAY;
+    } else if (strncmp(message, "/import ", 8) == 0 && !is_client) {
+        fen_to_chessboard(message + 8, game);
+        send(socketfd, message, strlen(message), 0);  
+        return COMMAND_IMPORT;
+    } else if (strncmp(message, "/save ", 6) == 0 && is_client) {
+        const char *username = message + 6;
+        if (strchr(username, ' ') != NULL) return COMMAND_ERROR;  
+
+        if (save_game(game, username, "game_database.txt") == 0) {
+            return COMMAND_SAVE;
+        } else {
+            return COMMAND_ERROR;
+        }
+    } else if (strncmp(message, "/load ", 6) == 0 && is_client) {
+        return COMMAND_UNKNOWN;  
+    }
+    return COMMAND_UNKNOWN;
+}
+
+int receive_command(ChessGame *game, const char *message, int socketfd, bool is_client) {
+    if (!game || !message) return COMMAND_ERROR;
+
+    const char *response = "";
+
+    if (strncmp(message, "/move ", 6) == 0) {
+        ChessMove move;
+        if (parse_move(message + 6, &move) == 0 && make_move(game, &move, is_client, false) == 0) {
+            response = "Move accepted";
+            return COMMAND_MOVE;
+        }
+        response = "Invalid move";
+        return COMMAND_ERROR;
+    } else if (strcmp(message, "/forfeit") == 0) {
+        response = "Forfeit acknowledged";
+        close(socketfd);  
+        return COMMAND_FORFEIT;
+    } else if (strncmp(message, "/import ", 8) == 0 && is_client) {
+        fen_to_chessboard( message + 8,game);
+        response = "Import successful";
+        return COMMAND_IMPORT;
+    } else if (!is_client && strncmp(message, "/load ", 6) == 0) {
+        char username[64]; 
+        int save_number;
+        if (sscanf(message + 6, "%63s %d", username, &save_number) == 2) {
+            if (load_game(game, username, "game_database.txt", save_number) == 0) {
+                return COMMAND_LOAD;
+            } else {
+                return COMMAND_ERROR;
+            }
+        } else {
+            return COMMAND_ERROR;
+        }
+    } else {
+        response = "Unknown command";
+        return COMMAND_UNKNOWN;
+    }
+
+    if (socketfd >= 0) {
+        send(socketfd, response, strlen(response), 0);
+    }
+}
+
+bool is_valid_username(const char *username) {
+    if (username == NULL || *username == '\0') return false;
+    for (; *username; ++username) {
+        if (*username == ' ') return false;
+    }
+    return true;
+}
+
+int save_game(ChessGame *game, const char *username, const char *db_filename) {
+    if (!is_valid_username(username)) {
+        return -1; 
+    }
+    FILE *file = fopen(db_filename, "a"); 
+    if (!file) {
+        return -1;
+    }
+
+    char fen[BUFFER_SIZE];
+    chessboard_to_fen(fen, game); 
+
+    if (fprintf(file, "%s:%s\n", username, fen) < 0) {
+        fclose(file); 
+        return -1; 
+    }
+
+    fclose(file); 
+    return 0; 
+}
+
+int load_game(ChessGame *game, const char *username, const char *db_filename, int save_number) {
+    FILE *file = fopen(db_filename, "r");
+    if (!file) {
+        return -1; 
+    }
+    char line[BUFFER_SIZE];
+    int found = 0;
+    int count = 0;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        char *file_username = strtok(line, ":");
+        char *fen = strtok(NULL, "\n");
+        
+        if (file_username && strcmp(file_username, username) == 0) {
+            ++count;
+            if (count == save_number) {
+                fen_to_chessboard(fen, game); 
+                found = 1;
+                break;
+            }
+        }
+    }
+
+    fclose(file);
+    return found ? 0 : -1; 
+}
 
 void display_chessboard(ChessGame *game) {
     printf("\nChessboard:\n");
