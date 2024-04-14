@@ -349,15 +349,13 @@ int send_command(ChessGame *game, const char *message, int socketfd, bool is_cli
         fen_to_chessboard(message + 8, game);
         send(socketfd, message, strlen(message), 0);  
         return COMMAND_IMPORT;
-    } else if (strncmp(message, "/save ", 6) == 0 && is_client) {
-        const char *username = message + 6;
-        if (strchr(username, ' ') != NULL) return COMMAND_ERROR;  
+    } else if (strncmp(message, "/save", 5) == 0) {
 
-        if (save_game(game, username, "game_database.txt") == 0) {
+        if (save_game(game, message + 6, "./game_database.txt") == 0) {
+            send(socketfd, message, strlen(message), 0);
             return COMMAND_SAVE;
-        } else {
-            return COMMAND_ERROR;
         }
+        return COMMAND_ERROR;
     } else if (strncmp(message, "/load ", 6) == 0 && is_client) {
         return COMMAND_UNKNOWN;  
     }
@@ -381,9 +379,8 @@ int receive_command(ChessGame *game, const char *message, int socketfd, bool is_
         response = "Forfeit acknowledged";
         close(socketfd);  
         return COMMAND_FORFEIT;
-    } else if (strncmp(message, "/import ", 8) == 0 && is_client) {
-        fen_to_chessboard( message + 8,game);
-        response = "Import successful";
+    } else if (strncmp(message, "/import", 7) == 0 && is_client) {
+        fen_to_chessboard(message + 8, game);
         return COMMAND_IMPORT;
     } else if (!is_client && strncmp(message, "/load ", 6) == 0) {
         char username[64]; 
