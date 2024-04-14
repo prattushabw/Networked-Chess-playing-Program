@@ -327,6 +327,28 @@ int make_move(ChessGame *game, ChessMove *move, bool is_client, bool validate_mo
     return 0; 
 }
 
+int parse_game_load_args(const char* input_string, char* username_buffer, int* game_id) {
+    const char* delimiter_position = strchr(input_string, ' ');
+    if (!delimiter_position) {
+        return 0; 
+    }
+    int length_of_username = delimiter_position - input_string;
+    memcpy(username_buffer, input_string, length_of_username);
+    username_buffer[length_of_username] = '\0'; 
+
+
+    const char* number_start = delimiter_position + 1;
+    char* parsing_end;
+    *game_id = strtol(number_start, &parsing_end, 10);
+
+
+    if (number_start == parsing_end) {
+        return 0; 
+    }
+    return 1; 
+}
+
+
 int send_command(ChessGame *game, const char *message, int socketfd, bool is_client) {
     if (!game || !message) return COMMAND_ERROR;
 
@@ -345,7 +367,7 @@ int send_command(ChessGame *game, const char *message, int socketfd, bool is_cli
     } else if (strcmp(message, "/chessboard") == 0 && !is_client) {
         display_chessboard(game); 
         return COMMAND_DISPLAY;
-    } else if (strncmp(message, "/import ", 8) == 0 && !is_client) {
+    } else if (strncmp(message, "/import ", 7) == 0 && !is_client) {
         fen_to_chessboard(message + 8, game);
         send(socketfd, message, strlen(message), 0);  
         return COMMAND_IMPORT;
@@ -356,9 +378,17 @@ int send_command(ChessGame *game, const char *message, int socketfd, bool is_cli
             return COMMAND_SAVE;
         }
         return COMMAND_ERROR;
-    } else if (strncmp(message, "/load ", 6) == 0 && is_client) {
-        return COMMAND_UNKNOWN;  
-    }
+    } else if (strncmp(message, "/load", 5) == 0) {
+        
+        char username[256];
+        int game_number;
+
+        if (parse_game_load_args(message + 6, username, &game_number) && load_game(game, username, "game_database.txt", game_number) == 0) {
+            send(socketfd, message, strlen(message), 0);
+            return COMMAND_LOAD;
+        }
+        return COMMAND_ERROR;
+        }
     return COMMAND_UNKNOWN;
 }
 
@@ -379,8 +409,9 @@ int receive_command(ChessGame *game, const char *message, int socketfd, bool is_
         response = "Forfeit acknowledged";
         close(socketfd);  
         return COMMAND_FORFEIT;
-    } else if (strncmp(message, "/import", 7) == 0 && is_client) {
-        fen_to_chessboard(message + 8, game);
+    } else if (strncmp(message, "/import ", 7) == 0 && is_client) {
+        fen_to_chessboard( message + 8,game);
+        response = "Import successful";
         return COMMAND_IMPORT;
     } else if (!is_client && strncmp(message, "/load ", 6) == 0) {
         char username[64]; 
