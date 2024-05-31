@@ -42,13 +42,13 @@ Parses a given FEN string and updates the game state accordingly:
 
 ### Save & Load Games
 Functions to save and load the game state to and from a file-based database:
-int save_game(ChessGame *game, const char *username, const char *db_filename);
-int load_game(ChessGame *game, const char *username, char *db_filename, int save_number);
+- int save_game(ChessGame *game, const char *username, const char *db_filename);
+- int load_game(ChessGame *game, const char *username, char *db_filename, int save_number);
 
 ### Send and Receive Messages
 Functions to handle communication between client and server by sending and receiving commands:
-int send_command(ChessGame *game, const char *message, int socketfd, bool is_client);
-int receive_command(ChessGame *game, const char *message, int socketfd, bool is_client);
+- int send_command(ChessGame *game, const char *message, int socketfd, bool is_client);
+- int receive_command(ChessGame *game, const char *message, int socketfd, bool is_client);
 
 ## Getting Started
 To get started, follow these steps:
